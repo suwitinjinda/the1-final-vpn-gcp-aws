@@ -1,0 +1,38 @@
+# Local .terraform directories
+**/.terraform/*
+./the1-nonprod-vpn/.terraform
+./the1-prod-vpn/.terraform
+
+./the1-nonprod-vpn/terraform.exe
+./the1-prod-vpn/terraform.exe
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+./the1-nonprod-vpn/*.tfstate
+./the1-prod-vpn/*.tfstate.*
+
+# Crash log files
+crash.log
+
+# Exclude Terraform variable files
+# *.tfvars
+# *.tfvars.json
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform plan files
+*.tfplan
+
+# .terraformrc and .terraform.d directories
+.terraformrc
+.terraform.d
+
+# Sensitive files
+*.pem
+*.key
+*.env
