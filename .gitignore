@@ -1,10 +1,8 @@
 # Local .terraform directories
 **/.terraform/*
-./the1-nonprod-vpn/.terraform
-./the1-prod-vpn/.terraform
+./the1-vpn/.terraform
 
-./the1-nonprod-vpn/terraform.exe
-./the1-prod-vpn/terraform.exe
+./the1-vpn/*.exe
 
 # .tfstate files
 *.tfstate

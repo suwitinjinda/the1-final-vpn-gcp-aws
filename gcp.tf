@@ -32,6 +32,17 @@ locals {
     ], 4) :
     k => v
   }
+  ##add second aws tgw
+  aws_vpn_conn_addresses1 = {
+    for k, v in chunklist([
+      for k, v in flatten([
+        for k, v in aws_vpn_connection.vpn_conn1 :
+        [v.tunnel1_address, v.tunnel2_address]
+      ]) : v
+    ], 4) :
+    k => v
+  }
+   ##end add second aws tgw
   tunnels = chunklist(flatten([
     for i in range(length(local.num_ext_gwys)) : [
       for k, v in setproduct(range(2), chunklist(range(4), 2)) :
@@ -57,10 +68,27 @@ locals {
       ]
     ]) : k => v
   }
+  ##add second aws tgw
+  bgp_sessions1 = {
+    for k, v in flatten([
+      for k, v in aws_vpn_connection.vpn_conn1 :
+      [
+        {
+          ip_address : v.tunnel1_cgw_inside_address,
+          peer_ip_address : v.tunnel1_vgw_inside_address
+        },
+        {
+          ip_address : v.tunnel2_cgw_inside_address,
+          peer_ip_address : v.tunnel2_vgw_inside_address
+        }
+      ]
+    ]) : k => v
+  }
+  ##end add second aws tgw
 }
 
 resource "google_compute_ha_vpn_gateway" "gwy" {
-  name    = "${var.prefix}-ha-vpn-gwy"
+  name    = "${var.prefix}-ha-vpn-gwy-aws"
   network = var.gcp_network
   region  = var.vpn_gwy_region
 }
@@ -68,7 +96,7 @@ resource "google_compute_ha_vpn_gateway" "gwy" {
 resource "google_compute_external_vpn_gateway" "ext_gwy" {
   for_each = { for k, v in local.num_ext_gwys : k => v }
 
-  name            = "${var.prefix}-ext-vpn-gwy-${each.key}"
+  name            = "${var.prefix}-ext-vpn-gwy-prod"
   redundancy_type = each.value["redundancy_type"]
   dynamic "interface" {
     for_each = local.aws_vpn_conn_addresses[each.key]
@@ -80,7 +108,7 @@ resource "google_compute_external_vpn_gateway" "ext_gwy" {
 }
 
 resource "google_compute_router" "router" {
-  name    = "${var.prefix}-vpn-router"
+  name    = "${var.prefix}-vpn-router-aws"
   network = var.gcp_network
   region  = var.vpn_gwy_region
   bgp {
@@ -97,7 +125,7 @@ resource "google_compute_router" "router" {
 resource "google_compute_vpn_tunnel" "tunnel" {
   for_each = { for k, v in local.tunnels : k => v }
 
-  name                            = "${var.prefix}-tunnel-${each.key}"
+  name                            = "${var.prefix}-tunnel-prod-${each.key}"
   shared_secret                   = var.shared_secret
   peer_external_gateway           = google_compute_external_vpn_gateway.ext_gwy[each.value["ext_gwy"]].name
   peer_external_gateway_interface = each.value["peer_gwy_interface"]
@@ -111,7 +139,7 @@ resource "google_compute_vpn_tunnel" "tunnel" {
 resource "google_compute_router_interface" "interface" {
   for_each = local.bgp_sessions
 
-  name       = "${var.prefix}-interface-${each.key}"
+  name       = "${var.prefix}-interface-prod-${each.key}"
   router     = google_compute_router.router.name
   region     = var.vpn_gwy_region
   ip_range   = "${each.value["ip_address"]}/30"
@@ -121,11 +149,63 @@ resource "google_compute_router_interface" "interface" {
 resource "google_compute_router_peer" "peer" {
   for_each = local.bgp_sessions
 
-  name            = "${var.prefix}-peer-${each.key}"
-  interface       = "${var.prefix}-interface-${each.key}"
+  name            = "${var.prefix}-peer-prod-${each.key}"
+  interface       = "${var.prefix}-interface-prod-${each.key}"
   peer_asn        = var.aws_router_asn
   ip_address      = each.value["ip_address"]
   peer_ip_address = each.value["peer_ip_address"]
   router          = google_compute_router.router.name
   region          = var.vpn_gwy_region
 }
+
+##add second aws tgw
+resource "google_compute_external_vpn_gateway" "ext_gwy1" {
+  for_each = { for k, v in local.num_ext_gwys : k => v }
+
+  name            = "${var.prefix}-ext-vpn-gwy-nonprod"
+  redundancy_type = each.value["redundancy_type"]
+  dynamic "interface" {
+    for_each = local.aws_vpn_conn_addresses1[each.key]
+    content {
+      id         = interface.key
+      ip_address = interface.value
+    }
+  }
+}
+
+resource "google_compute_vpn_tunnel" "tunnel1" {
+  for_each = { for k, v in local.tunnels : k => v }
+
+  name                            = "${var.prefix}-tunnel-nonprod-${each.key}"
+  shared_secret                   = var.shared_secret
+  peer_external_gateway           = google_compute_external_vpn_gateway.ext_gwy1[each.value["ext_gwy"]].name
+  peer_external_gateway_interface = each.value["peer_gwy_interface"]
+  region                          = var.vpn_gwy_region
+  router                          = google_compute_router.router.name
+  ike_version                     = "2"
+  vpn_gateway                     = google_compute_ha_vpn_gateway.gwy.id
+  vpn_gateway_interface           = each.value["vpn_gwy_interface"]
+}
+
+resource "google_compute_router_interface" "interface1" {
+  for_each = local.bgp_sessions1
+
+  name       = "${var.prefix}-interface-nonprod-${each.key}"
+  router     = google_compute_router.router.name
+  region     = var.vpn_gwy_region
+  ip_range   = "${each.value["ip_address"]}/30"
+  vpn_tunnel = google_compute_vpn_tunnel.tunnel1[each.key].name
+}
+
+resource "google_compute_router_peer" "peer1" {
+  for_each = local.bgp_sessions1
+
+  name            = "${var.prefix}-peer-nonprod-${each.key}"
+  interface       = "${var.prefix}-interface-nonprod-${each.key}"
+  peer_asn        = var.aws_router_asn_2
+  ip_address      = each.value["ip_address"]
+  peer_ip_address = each.value["peer_ip_address"]
+  router          = google_compute_router.router.name
+  region          = var.vpn_gwy_region
+}
+##end add second aws tgw

@@ -28,7 +28,7 @@ variable "aws_router_asn" {
   type = string
 }
 
-variable "aws_vpc_id" {
+variable "aws_router_asn_2" {
   type = string
 }
 
@@ -40,10 +40,6 @@ variable "gcp_network" {
 # variable "aws_vpc_cidr" {
 #   type = string
 # }
-
-variable "aws_private_subnets" {
-  type = list(string)
-}
 
 variable "shared_secret" {
   type = string
